@@ -69,21 +69,9 @@ func Migrate(ctx context.Context, logger log.Logger, sourceBeaconPath, beaconNam
 		return nil
 	}
 
-	switch {
-	case bufferSize < 0:
-		logger.Infow("buffer size not specified, defaulting to 10000")
-		bufferSize = 10_000
-	case bufferSize == 0:
-		var err error
-		bufferSize, err = automaticBufferSize(logger, sourceBeaconPath)
-		if err != nil {
-			return err
-		}
-	case bufferSize <= 10_000:
-		logger.Warnw("buffer size seems a bit too small. The migration process might be slow", "bufferSize", bufferSize)
-	case bufferSize > 10_000_000:
-		//nolint:lll // This line has the right amount of chars
-		logger.Warnw("buffer size seems a bit too large. Make sure your system can allocate enough system memory for this", "bufferSize", bufferSize)
+	bufferSize, err := computerBufferSize(bufferSize, logger, sourceBeaconPath)
+	if err != nil {
+		return err
 	}
 
 	m := migrator{
@@ -105,6 +93,26 @@ func Migrate(ctx context.Context, logger log.Logger, sourceBeaconPath, beaconNam
 	}
 
 	return m.doMigrate(ctx)
+}
+
+func computerBufferSize(bufferSize int, logger log.Logger, sourceBeaconPath string) (int, error) {
+	switch {
+	case bufferSize < 0:
+		logger.Infow("buffer size not specified, defaulting to 10000")
+		bufferSize = 10_000
+	case bufferSize == 0:
+		var err error
+		bufferSize, err = automaticBufferSize(logger, sourceBeaconPath)
+		if err != nil {
+			return 0, err
+		}
+	case bufferSize <= 10_000:
+		logger.Warnw("buffer size seems a bit too small. The migration process might be slow", "bufferSize", bufferSize)
+	case bufferSize > 10_000_000:
+		//nolint:lll // This line has the right amount of chars
+		logger.Warnw("buffer size seems a bit too large. Make sure your system can allocate enough system memory for this", "bufferSize", bufferSize)
+	}
+	return bufferSize, nil
 }
 
 func automaticBufferSize(logger log.Logger, sourceBeaconPath string) (int, error) {
@@ -382,7 +390,6 @@ func (m *migrator) migrateBolt() {
 
 		// We know this will be an append-only workload, it's safe to do it this way.
 		bucket.FillPercent = 1.0
-		// bucket.FillPercent = 0.5
 
 		newKey := make([]byte, 8)
 		for val := range m.distChan {
