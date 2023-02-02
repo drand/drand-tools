@@ -11,9 +11,6 @@ import (
 	"github.com/drand/drand-tools/internal/migration"
 )
 
-var buildDate string
-var gitCommit string
-
 var sourcePath = flag.String("source", "", "The source database to be migrated to the new format.")
 var beaconName = flag.String("beacon", "", "The name of the beacon to be migrated.")
 var migrationTarget = flag.String("target", "", "The type of database to migrate to. Supported values: boltdb, postgres.\n"+
@@ -52,6 +49,4 @@ func main() {
 		logger.Panicw("while migrating the databaase", "err", err)
 	}
 	logger.Infow("finished migration process")
-	_ = buildDate
-	_ = gitCommit
 }

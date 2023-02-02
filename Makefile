@@ -5,12 +5,9 @@
 .PHONY: linter install build client
 
 VER_PACKAGE=github.com/drand/drand/common
-CLI_PACKAGE=github.com/drand/drand-tools/cmd/db-migration
 
 GIT_REVISION := $(shell git rev-parse --short HEAD)
 BUILD_DATE := $(shell date -u +%d/%m/%Y@%H:%M:%S)
-
-drand: build
 
 ####################  Lint and fmt process ##################
 
@@ -60,18 +57,10 @@ coverage:
 
 # create the "db-migration" binary and install it in $GOBIN
 install:
-	go install -ldflags "-X $(VER_PACKAGE).COMMIT=$(GIT_REVISION) -X $(VER_PACKAGE).BUILDDATE=$(BUILD_DATE) -X $(CLI_PACKAGE).buildDate=$(BUILD_DATE) -X $(CLI_PACKAGE).gitCommit=$(GIT_REVISION)" ./cmd/db-migration
+	go install -ldflags "-X $(VER_PACKAGE).COMMIT=$(GIT_REVISION) -X $(VER_PACKAGE).BUILDDATE=$(BUILD_DATE)" ./cmd/db-migration
 
 # create the "db-migration" binary in the current folder
 db-migration:
-	go build -o db-migration -mod=readonly -ldflags "-X $(VER_PACKAGE).COMMIT=$(GIT_REVISION) -X $(VER_PACKAGE).BUILDDATE=$(BUILD_DATE) -X $(CLI_PACKAGE).buildDate=$(BUILD_DATE) -X $(CLI_PACKAGE).gitCommit=$(GIT_REVISION)" ./cmd/db-migration
+	go build -o db-migration -mod=readonly -ldflags "-X $(VER_PACKAGE).COMMIT=$(GIT_REVISION) -X $(VER_PACKAGE).BUILDDATE=$(BUILD_DATE)" ./cmd/db-migration
 
 build_all: db-migration
-
-#build_docker_all: build_docker build_docker_dev
-#
-#build_docker:
-#	docker build --build-arg gitCommit=$(GIT_REVISION) --build-arg buildDate=$(BUILD_DATE) -t drandorg/go-drand:latest .
-#
-#build_docker_dev:
-#	docker build -f test/docker/Dockerfile --build-arg gitCommit=$(GIT_REVISION) --build-arg buildDate=$(BUILD_DATE) -t drandorg/go-drand-dev:latest .

@@ -25,10 +25,10 @@ issues:
 #    - path: core/broadcast.go
 #      linters:
 #        - interfacer # Deprecated
-run:
-  skip-dirs:
-    - demo
-    - test
+#run:
+#  skip-dirs:
+#    - demo
+#    - test
 
 linters:
   enable:
