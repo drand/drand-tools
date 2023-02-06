@@ -5,11 +5,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+
+	"github.com/drand/drand-tools/internal/migration"
 	"github.com/drand/drand/chain"
 	"github.com/drand/drand/fs"
 	"github.com/drand/drand/log"
-
-	"github.com/drand/drand-tools/internal/migration"
 )
 
 var sourcePath = flag.String("source", "", "The source database to be migrated to the new format.")
@@ -18,14 +18,19 @@ var migrationTarget = flag.String("target", "", "The type of database to migrate
 	"If boltdb is used, then the migration will be done in-place.\n"+
 	"If postgres is used, then you need to specify the -pg-dsn flag value",
 )
+
+//nolint:lll // This is a flag
 var pgDSN = flag.String("pg-dsn", `postgres://drand:drand@localhost:5432/drand?sslmode=disable&connect_timeout=5`, "The connection details for Postgres.")
-var bufferSize = flag.Int("buffer-size", 10000, "Number of beacons that can be migrated at once. Use 0 to pre-allocate all the beacons.")
+var bufferSize = flag.Int("buffer-size", 10_000, "Number of beacons that can be migrated at once. Use 0 to pre-allocate all the beacons.")
 
 func main() {
 	flag.Parse()
 	logger := log.NewLogger(nil, log.LogDebug)
 
 	err := checkValues(*sourcePath, *beaconName, *pgDSN, chain.StorageType(*migrationTarget))
+	if err != nil {
+		logger.Panicw("while validating input values", "err", err)
+	}
 
 	err = migrate(logger, *sourcePath, *beaconName, *pgDSN, chain.StorageType(*migrationTarget), *bufferSize)
 	if err != nil &&

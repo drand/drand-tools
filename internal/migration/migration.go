@@ -46,6 +46,8 @@ type (
 	}
 )
 
+const ownerOnly = 0600
+
 var (
 	// ErrMigrationNotNeeded ...
 	ErrMigrationNotNeeded = fmt.Errorf("migration not needed")
@@ -117,7 +119,7 @@ func computerBufferSize(bufferSize int, logger log.Logger, sourceBeaconPath stri
 
 func automaticBufferSize(logger log.Logger, sourceBeaconPath string) (int, error) {
 	logger.Warnw("buffer size set to 0. Running automatic buffer inference. Make sure you have enough system memory for this")
-	existingDB, err := bbolt.Open(sourceBeaconPath, 0600, nil)
+	existingDB, err := bbolt.Open(sourceBeaconPath, ownerOnly, nil)
 	if err != nil {
 		return -1, err
 	}
@@ -154,7 +156,7 @@ func shouldMigrate(ctx context.Context, logger log.Logger, sourceBeaconPath, bea
 }
 
 func shouldMigrateBolt(sourceBeaconPath string) error {
-	existingDB, err := bbolt.Open(sourceBeaconPath, 0600, nil)
+	existingDB, err := bbolt.Open(sourceBeaconPath, ownerOnly, nil)
 	if err != nil {
 		return err
 	}
@@ -371,7 +373,7 @@ func (m *migrator) migrateBolt() {
 		m.swapMigratedFile(newBeaconPath, rows)
 	}()
 
-	db, err := bbolt.Open(newBeaconPath, 0600, nil)
+	db, err := bbolt.Open(newBeaconPath, ownerOnly, nil)
 	if err != nil {
 		m.errChan <- err
 		return
@@ -423,7 +425,7 @@ func (m *migrator) reader() {
 
 	defer close(m.distChan)
 
-	existingDB, err := bbolt.Open(m.sourceBeaconPath, 0600, nil)
+	existingDB, err := bbolt.Open(m.sourceBeaconPath, ownerOnly, nil)
 	if err != nil {
 		m.errChan <- err
 		return
