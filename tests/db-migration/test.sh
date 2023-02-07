@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
 set -ex
-stty -echoctl # hide ^C
 
 err() {
    echo "$@" > /dev/stderr
 }
+
+if $CI neq "true"; then
+  stty -echoctl # hide ^C
+fi
 
 pushd "$(git rev-parse --show-toplevel)"
 
