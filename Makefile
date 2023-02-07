@@ -49,7 +49,7 @@ test-unit-cover:
 	go test -failfast -short -v -coverprofile=coverage.txt -covermode=count -coverpkg=all $(go list ./... | grep -v /demo/)
 
 test-integration:
-	go test -failfast -race -short -tags integration -v ./...
+	DRAND_SHARE_SECRET=thisismytestsecretfortheintegrationtests ./tests/db-migration/test.sh
 
 coverage:
 	go get -v -t -d ./...

@@ -49,7 +49,7 @@ func checkValues(sourcePath, beaconName, pgDSN string, migrationTarget chain.Sto
 		return fmt.Errorf("beacon name must be specified but %s", "beacon name is empty")
 	}
 
-	if e, _ := fs.Exists(sourcePath); e {
+	if e, _ := fs.Exists(sourcePath); !e {
 		return fmt.Errorf("source path must be specified but %s", "source path does not exists")
 	}
 
