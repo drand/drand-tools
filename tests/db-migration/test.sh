@@ -2,8 +2,7 @@
 
 set -ex
 
-if $CI eq "true"; then
-else
+if [[ $CI != "true" ]]; then
   stty -echoctl # hide ^C
 fi
 
