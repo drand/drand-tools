@@ -153,11 +153,11 @@ $tmp/drand-master sync --sync-nodes 127.0.0.1:$((p[0]+1)) --control "${p[0]}" --
 
 sleep 1
 
-err "[+] Waiting for SIGINT to terminate..."
+err "[+] Halting the test..."
 
 for pid in "${bgPIDs[@]}"; do
     if ps -p "${pid}" > /dev/null
     then
-        wait "${pid}"
+        kill -9 "${pid}"
     fi
 done
