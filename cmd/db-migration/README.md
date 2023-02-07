@@ -31,7 +31,26 @@ This change is transparent to the user.
 
 To use this tool, you should first stop the node, then run a command similar to this:
 ```shell
-db-migration -beacon default -target bolt -source $TMP/d1/multibeacon/default/db/drand.db
+db-migration -beacon default -target bolt -bufferSize 20000 -source $TMP/d1/multibeacon/default/db/drand.db
 ```
 
-This will produce a backup of the existing `drand.db` file
+This will:
+- use the `source` file as an input to migrate from that database format
+- swap the newly created file with the `source` file
+- produce a backup of the existing `drand.db` file
+
+The backup is produced only when migrating from BoltDB to BoltDB.
+A backup will not be produced for a migration from BoltDB to PostgreSQL.
+
+### Buffering size
+
+To help with different system constraints, the tool exposes the `-bufferSize` flag.
+
+This allows users to set the number of beacons stored in-memory during the migration. It will also
+act as a hint for how large the BoltDB transaction must be before flushing the records to the file.
+
+The logic for setting it is:
+- If the bufferSize < 0 then the application will default to 10000 entries.
+- If the bufferSize == 0 then the application will use the number of rounds stored in the source database as size. For large workloads, this might consume a lot of memory.
+- If the is 0 < bufferSize <= 10000 then you'll see a warning about the process possibly taking a bit longer than usual.
+- If the bufferSize > 10000000 then you'll see a warning about this as the system memory could get pretty high.
