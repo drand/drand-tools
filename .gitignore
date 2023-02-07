@@ -7,6 +7,5 @@ web/public/
 /drand
 cover*
 .idea
-db-migration
 **/nohup.out
 .tool-versions
