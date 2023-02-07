@@ -26,9 +26,6 @@ type (
 	}
 
 	migrator struct {
-		ctx       context.Context
-		ctxCancel context.CancelFunc
-
 		startedAt time.Time
 		logger    log.Logger
 
@@ -37,34 +34,28 @@ type (
 		beaconName       string
 		sourceBeaconPath string
 
-		// existingDB   *bbolt.DB
 		existingRows int
-
-		distChan    chan beacon
-		errChan     chan error
-		destination chain.StorageType
+		destination  chain.StorageType
 	}
 )
 
-const ownerOnly = 0600
+const (
+	ownerOnly = 0600
 
-const DefaultBufferSize = 10_000
+	DefaultBufferSize = 10_000
+)
 
 var (
-	// ErrMigrationNotNeeded ...
+	// ErrMigrationNotNeeded is returned if the database format is already at the target version
 	ErrMigrationNotNeeded = fmt.Errorf("migration not needed")
 
 	bucketName = []byte("beacons")
 )
 
-//nolint:lll // This function uses the right amount of params
-func Migrate(ctx context.Context, logger log.Logger, sourceBeaconPath, beaconName string, destination chain.StorageType, pgDSN string, bufferSize int) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
+func Migrate(logger log.Logger, sourceBeaconPath, beaconName string, destination chain.StorageType, pgDSN string, bufferSize int) error {
 	startedAt := time.Now()
 
-	if err := shouldMigrate(ctx, logger, sourceBeaconPath, beaconName, destination, pgDSN); err != nil {
+	if err := shouldMigrate(logger, sourceBeaconPath, beaconName, destination, pgDSN); err != nil {
 		logger.Warnw("decided storage format migration is not needed", "err", err)
 		if errors.Is(err, ErrMigrationNotNeeded) {
 			return err
@@ -87,33 +78,27 @@ func Migrate(ctx context.Context, logger log.Logger, sourceBeaconPath, beaconNam
 		beaconName:       beaconName,
 		sourceBeaconPath: sourceBeaconPath,
 		destination:      destination,
-
-		ctx:       ctx,
-		ctxCancel: cancel,
-
-		distChan: make(chan beacon, bufferSize),
-
-		errChan: make(chan error),
 	}
 
-	return m.doMigrate(ctx)
+	return m.doMigrate()
 }
 
 func computerBufferSize(bufferSize int, logger log.Logger, sourceBeaconPath string) (int, error) {
-	switch {
-	case bufferSize < 0:
+	if bufferSize < 0 {
 		logger.Infow("buffer size not specified, defaulting to 10000")
-		bufferSize = DefaultBufferSize
-	case bufferSize == 0:
-		var err error
-		bufferSize, err = automaticBufferSize(logger, sourceBeaconPath)
-		if err != nil {
-			return 0, err
-		}
-	case bufferSize < DefaultBufferSize:
+		return DefaultBufferSize, nil
+	}
+
+	if bufferSize == 0 {
+		return automaticBufferSize(logger, sourceBeaconPath)
+	}
+
+	if bufferSize < DefaultBufferSize {
 		logger.Warnw("buffer size seems a bit too small. The migration process might be slow", "bufferSize", bufferSize)
+	}
+
 	//nolint:gomnd // See below
-	case bufferSize > 10_000_000:
+	if bufferSize > 10_000_000 {
 		//nolint:lll // This line has the right amount of chars
 		logger.Warnw("buffer size seems a bit too large. Make sure your system can allocate enough system memory for this", "bufferSize", bufferSize)
 	}
@@ -126,9 +111,7 @@ func automaticBufferSize(logger log.Logger, sourceBeaconPath string) (int, error
 	if err != nil {
 		return -1, err
 	}
-	defer func() {
-		_ = existingDB.Close()
-	}()
+	defer existingDB.Close()
 
 	var bufferSize = 0
 
@@ -145,14 +128,13 @@ func automaticBufferSize(logger log.Logger, sourceBeaconPath string) (int, error
 	return bufferSize, nil
 }
 
-//nolint:lll // This function has the right amount of
-func shouldMigrate(ctx context.Context, logger log.Logger, sourceBeaconPath, beaconName string, destination chain.StorageType, pgDSN string) error {
+func shouldMigrate(logger log.Logger, sourceBeaconPath, beaconName string, destination chain.StorageType, pgDSN string) error {
 	//nolint:exhaustive // We want to explicitly ignore the chain.MemDB backend since there's nothing to migrate there.
 	switch destination {
 	case chain.BoltDB:
 		return shouldMigrateBolt(sourceBeaconPath)
 	case chain.PostgreSQL:
-		return shouldMigratePostgres(ctx, logger, beaconName, pgDSN)
+		return shouldMigratePostgres(logger, beaconName, pgDSN)
 	default:
 		return fmt.Errorf("unknown destination type %q for migration package", destination)
 	}
@@ -163,16 +145,12 @@ func shouldMigrateBolt(sourceBeaconPath string) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = existingDB.Close()
-	}()
+	defer existingDB.Close()
 
 	return existingDB.View(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(bucketName)
-		_, value := bucket.Cursor().First()
-		b := beacon{}
-		err := json.Unmarshal(value, &b)
-		if err != nil {
+		_, value := tx.Bucket(bucketName).Cursor().First()
+		var b = beacon{}
+		if json.Unmarshal(value, &b) != nil {
 			return ErrMigrationNotNeeded
 		}
 
@@ -202,14 +180,16 @@ func pgConn(ctx context.Context, logger log.Logger, beaconName, pgDSN string) (*
 	}
 
 	cancel := func() {
-		_ = store.Close(ctx)
-		_ = conn.Close()
+		store.Close(ctx)
+		conn.Close()
 	}
 
 	return store, cancel, err
 }
 
-func shouldMigratePostgres(ctx context.Context, logger log.Logger, beaconName, pgDSN string) error {
+func shouldMigratePostgres(logger log.Logger, beaconName, pgDSN string) error {
+	ctx := context.Background()
+
 	store, cancel, err := pgConn(ctx, logger, beaconName, pgDSN)
 	if err != nil {
 		return err
@@ -229,7 +209,8 @@ func shouldMigratePostgres(ctx context.Context, logger log.Logger, beaconName, p
 	return nil
 }
 
-func (m *migrator) doMigrate(ctx context.Context) error {
+func (m *migrator) doMigrate() error {
+	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		finishedIn := time.Since(m.startedAt).String()
 		m.logger.Infow(
@@ -237,82 +218,79 @@ func (m *migrator) doMigrate(ctx context.Context) error {
 			"beaconName", m.beaconName,
 			"finishedIn", finishedIn,
 		)
+
+		cancel()
 	}()
+
+	distChan := make(chan beacon, m.bufferSize)
+
+	errChan := make(chan error)
 
 	//nolint:exhaustive // We want to explicitly ignore the chain.MemDB backend since there's nothing to migrate there.
 	switch m.destination {
 	case chain.BoltDB:
-		go m.migrateBolt()
+		go m.migrateBolt(ctx, distChan, errChan)
 	case chain.PostgreSQL:
-		go m.migratePostgres(ctx)
+		go m.migratePostgres(ctx, distChan, errChan)
+	default:
+		return nil
 	}
 
-	// Spin up the reader
-	go m.reader()
+	if err := m.reader(distChan); err != nil {
+		return err
+	}
 
-	return m.wait()
+	return <-errChan
 }
 
 //nolint:funlen // This function has the right length
-func (m *migrator) migratePostgres(ctx context.Context) {
-	rows := 0
-	defer func() {
-		if m.existingRows != rows {
-			err := fmt.Errorf("not all rounds migrated successfully expected: %d actual: %d", m.existingRows, rows)
-			m.errChan <- err
-			return
-		}
-	}()
-	defer func() {
-		finishedIn := time.Since(m.startedAt).String()
-		m.logger.Infow("finished saving data in postgres", "rows", rows, "finishedIn", finishedIn)
-	}()
-	defer m.ctxCancel()
-	defer func() {
-		if m.existingRows != rows {
-			m.logger.Errorw("not all rounds migrated successfully", "expected", m.existingRows, "actually", rows)
-			return
-		}
-	}()
-
+func (m *migrator) migratePostgres(ctx context.Context, distChan chan beacon, errChan chan error) {
 	store, cancel, err := pgConn(ctx, m.logger, m.beaconName, m.pgDSN)
 	if err != nil {
-		m.errChan <- err
+		errChan <- err
 		return
 	}
-	defer cancel()
+	rows := 0
+	defer func() {
+		cancel()
+		finishedIn := time.Since(m.startedAt).String()
+		m.logger.Infow("finished saving data in postgres", "rows", rows, "finishedIn", finishedIn)
 
-	buffSize := 0
+		if m.existingRows != rows {
+			errChan <- fmt.Errorf("not all rounds migrated successfully expected: %d actual: %d", m.existingRows, rows)
+			return
+		}
+		close(errChan)
+	}()
 
 	m.logger.Infow("dropping the FK from the table")
 	err = store.DropFK(ctx)
 	if err != nil {
-		m.errChan <- err
+		errChan <- err
 		return
 	}
 	defer func() {
 		m.logger.Infow("adding FK back to the table")
 		err := store.AddFK(ctx)
 		if err != nil {
-			m.errChan <- err
+			errChan <- err
 			return
 		}
 	}()
 
-	// Make sure we can still commit to the database
-	// avoiding the error:
+	// Make sure we can still commit to the database avoiding the error:
 	//   pq: got 9229389 parameters but PostgreSQL only supports 65535 parameters
+	const maxPgBufferSize = 30_000
+
 	pgBuffSize := m.bufferSize
-	//nolint:gomnd // See below
-	if pgBuffSize > 30_000 {
-		//nolint:gomnd // See below
-		pgBuffSize = 30_000
+	if pgBuffSize > maxPgBufferSize {
+		pgBuffSize = maxPgBufferSize
 		m.logger.Warnw("buffer size automatically reconfigured for Postgres only", "bufferSize", pgBuffSize)
 	}
 
+	buffSize := 0
 	bs := make([]chain.Beacon, pgBuffSize)
-
-	for val := range m.distChan {
+	for val := range distChan {
 		rows++
 		b := chain.Beacon(val)
 
@@ -324,11 +302,10 @@ func (m *migrator) migratePostgres(ctx context.Context) {
 			err := store.BatchPut(ctx, bs)
 			if err != nil {
 				m.logger.Errorw("while writing buffer contents to DB", "err", err)
-				m.errChan <- err
+				errChan <- err
 				return
 			}
 
-			bs = make([]chain.Beacon, pgBuffSize)
 			buffSize = 0
 		}
 	}
@@ -338,53 +315,40 @@ func (m *migrator) migratePostgres(ctx context.Context) {
 		err := store.BatchPut(ctx, bs[:buffSize])
 		if err != nil {
 			m.logger.Errorw("while writing buffer contents to DB", "err", err)
-			m.errChan <- err
+			errChan <- err
 			return
 		}
 	}
 }
 
-func (m *migrator) swapMigratedFile(newBeaconPath string, rows int) {
+func (m *migrator) swapMigratedFile(newBeaconPath string, rows int) error {
 	if m.existingRows != rows {
-		err := fmt.Errorf("not all rounds migrated successfully expected: %d actual: %d", m.existingRows, rows)
-		m.errChan <- err
-		return
+		return fmt.Errorf("not all rounds migrated successfully expected: %d actual: %d", m.existingRows, rows)
 	}
 
 	m.logger.Infow("migrating BoltDB file")
+
 	err := os.Rename(m.sourceBeaconPath, fmt.Sprintf("%s.old", m.sourceBeaconPath))
 	if err != nil {
-		m.errChan <- err
-		return
+		return err
 	}
-	err = os.Rename(newBeaconPath, m.sourceBeaconPath)
-	if err != nil {
-		m.errChan <- err
-		return
-	}
+
+	return os.Rename(newBeaconPath, m.sourceBeaconPath)
 }
 
-func (m *migrator) migrateBolt() {
+func (m *migrator) migrateBolt(ctx context.Context, distChan chan beacon, errChan chan error) {
 	newBeaconPath := m.sourceBeaconPath + "-migrated"
 	rows := 0
-	defer func() {
-		finishedIn := time.Since(m.startedAt).String()
-		m.logger.Infow("finished saving data in boltdb", "rows", rows, "finishedIn", finishedIn)
-	}()
-	defer m.ctxCancel()
-
-	// Swap migrated file with the old one.
-	defer func() {
-		m.swapMigratedFile(newBeaconPath, rows)
-	}()
 
 	db, err := bbolt.Open(newBeaconPath, ownerOnly, nil)
 	if err != nil {
-		m.errChan <- err
+		errChan <- err
 		return
 	}
 	defer func() {
-		_ = db.Close()
+		db.Close()
+		finishedIn := time.Since(m.startedAt).String()
+		m.logger.Infow("finished saving data in boltdb", "rows", rows, "finishedIn", finishedIn)
 	}()
 
 	db.MaxBatchSize = m.bufferSize
@@ -400,7 +364,13 @@ func (m *migrator) migrateBolt() {
 
 		//nolint:gomnd // uint64 is 8 bytes
 		newKey := make([]byte, 8)
-		for val := range m.distChan {
+		for val := range distChan {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
 			rows++
 
 			binary.BigEndian.PutUint64(newKey, val.Round)
@@ -414,11 +384,14 @@ func (m *migrator) migrateBolt() {
 	})
 
 	if err != nil {
-		m.errChan <- err
+		errChan <- err
+		return
 	}
+
+	errChan <- m.swapMigratedFile(newBeaconPath, rows)
 }
 
-func (m *migrator) reader() {
+func (m *migrator) reader(distChan chan beacon) error {
 	defer func() {
 		finishedIn := time.Since(m.startedAt).String()
 		m.logger.Infow(
@@ -429,23 +402,16 @@ func (m *migrator) reader() {
 		)
 	}()
 
-	defer close(m.distChan)
+	defer close(distChan)
 
 	existingDB, err := bbolt.Open(m.sourceBeaconPath, ownerOnly, nil)
 	if err != nil {
-		m.errChan <- err
-		return
+		return err
 	}
 
-	defer func() {
-		err := existingDB.Close()
-		if err != nil {
-			m.errChan <- err
-			return
-		}
-	}()
+	defer existingDB.Close()
 
-	err = existingDB.View(func(tx *bbolt.Tx) error {
+	return existingDB.View(func(tx *bbolt.Tx) error {
 		existingBucket := tx.Bucket(bucketName)
 		return existingBucket.ForEach(func(k, v []byte) error {
 			m.existingRows++
@@ -456,23 +422,9 @@ func (m *migrator) reader() {
 				return err
 			}
 
-			m.distChan <- b
+			distChan <- b
 
 			return nil
 		})
 	})
-
-	if err != nil {
-		m.errChan <- err
-	}
-}
-
-func (m *migrator) wait() error {
-	select {
-	case <-m.ctx.Done():
-		return nil
-	case err := <-m.errChan:
-		defer close(m.errChan)
-		return err
-	}
 }
