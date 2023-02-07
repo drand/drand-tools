@@ -48,6 +48,8 @@ type (
 
 const ownerOnly = 0600
 
+const DefaultBufferSize = 10_000
+
 var (
 	// ErrMigrationNotNeeded ...
 	ErrMigrationNotNeeded = fmt.Errorf("migration not needed")
@@ -101,15 +103,16 @@ func computerBufferSize(bufferSize int, logger log.Logger, sourceBeaconPath stri
 	switch {
 	case bufferSize < 0:
 		logger.Infow("buffer size not specified, defaulting to 10000")
-		bufferSize = 10_000
+		bufferSize = DefaultBufferSize
 	case bufferSize == 0:
 		var err error
 		bufferSize, err = automaticBufferSize(logger, sourceBeaconPath)
 		if err != nil {
 			return 0, err
 		}
-	case bufferSize < 10_000:
+	case bufferSize < DefaultBufferSize:
 		logger.Warnw("buffer size seems a bit too small. The migration process might be slow", "bufferSize", bufferSize)
+	//nolint:gomnd // See below
 	case bufferSize > 10_000_000:
 		//nolint:lll // This line has the right amount of chars
 		logger.Warnw("buffer size seems a bit too large. Make sure your system can allocate enough system memory for this", "bufferSize", bufferSize)
@@ -300,7 +303,9 @@ func (m *migrator) migratePostgres(ctx context.Context) {
 	// avoiding the error:
 	//   pq: got 9229389 parameters but PostgreSQL only supports 65535 parameters
 	pgBuffSize := m.bufferSize
+	//nolint:gomnd // See below
 	if pgBuffSize > 30_000 {
+		//nolint:gomnd // See below
 		pgBuffSize = 30_000
 		m.logger.Warnw("buffer size automatically reconfigured for Postgres only", "bufferSize", pgBuffSize)
 	}
@@ -393,6 +398,7 @@ func (m *migrator) migrateBolt() {
 		// We know this will be an append-only workload, it's safe to do it this way.
 		bucket.FillPercent = 1.0
 
+		//nolint:gomnd // uint64 is 8 bytes
 		newKey := make([]byte, 8)
 		for val := range m.distChan {
 			rows++

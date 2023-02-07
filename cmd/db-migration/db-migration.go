@@ -21,7 +21,9 @@ var migrationTarget = flag.String("target", "", "The type of database to migrate
 
 //nolint:lll // This is a flag
 var pgDSN = flag.String("pg-dsn", `postgres://drand:drand@localhost:5432/drand?sslmode=disable&connect_timeout=5`, "The connection details for Postgres.")
-var bufferSize = flag.Int("buffer-size", 10_000, "Number of beacons that can be migrated at once. Use 0 to pre-allocate all the beacons.")
+
+//nolint:lll // This is a flag
+var bufferSize = flag.Int("buffer-size", migration.DefaultBufferSize, "Number of beacons that can be migrated at once. Use 0 to pre-allocate all the beacons.")
 
 func main() {
 	flag.Parse()
