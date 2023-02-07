@@ -1,0 +1,8 @@
+deploy
+test-integration-notls
+test-integration-tls
+test/docker
+drand-testnet.db
+drand-testnet.db.bkp
+drand-testnet.db.bkp.old
+backups

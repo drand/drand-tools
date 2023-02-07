@@ -9,3 +9,5 @@ cover*
 .idea
 **/nohup.out
 .tool-versions
+backups
+/db-migration

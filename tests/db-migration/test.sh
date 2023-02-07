@@ -148,7 +148,7 @@ sleep 1
 err "[+] checking database after migration..."
 $tmp/drand-master sync --sync-nodes 127.0.0.1:$((p[0]+1)) --control "${p[0]}" --up-to 20
 
-exit 0
+sleep 1
 
 err "[+] Waiting for SIGINT to terminate..."
 

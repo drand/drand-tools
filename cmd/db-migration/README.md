@@ -52,5 +52,5 @@ act as a hint for how large the BoltDB transaction must be before flushing the r
 The logic for setting it is:
 - If the bufferSize < 0 then the application will default to 10000 entries.
 - If the bufferSize == 0 then the application will use the number of rounds stored in the source database as size. For large workloads, this might consume a lot of memory.
-- If the is 0 < bufferSize <= 10000 then you'll see a warning about the process possibly taking a bit longer than usual.
+- If the is 0 < bufferSize < 10000 then you'll see a warning about the process possibly taking a bit longer than usual.
 - If the bufferSize > 10000000 then you'll see a warning about this as the system memory could get pretty high.

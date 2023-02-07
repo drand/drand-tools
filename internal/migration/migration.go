@@ -108,7 +108,7 @@ func computerBufferSize(bufferSize int, logger log.Logger, sourceBeaconPath stri
 		if err != nil {
 			return 0, err
 		}
-	case bufferSize <= 10_000:
+	case bufferSize < 10_000:
 		logger.Warnw("buffer size seems a bit too small. The migration process might be slow", "bufferSize", bufferSize)
 	case bufferSize > 10_000_000:
 		//nolint:lll // This line has the right amount of chars
