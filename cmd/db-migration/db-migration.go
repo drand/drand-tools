@@ -32,7 +32,7 @@ func main() {
 
 	err := run(logger)
 	if err != nil && !errors.Is(err, migration.ErrMigrationNotNeeded) {
-		logger.Panicw("while migrating the databaase", "err", err)
+		logger.Panicw("while migrating the database", "err", err)
 	}
 	logger.Infow("finished migration process")
 }

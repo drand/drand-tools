@@ -35,6 +35,7 @@ type (
 		sourceBeaconPath string
 
 		existingRows int
+		migratedRows int
 		destination  chain.StorageType
 	}
 )
@@ -207,71 +208,54 @@ func shouldMigratePostgres(logger log.Logger, beaconName, pgDSN string) error {
 	return nil
 }
 
-func (m *migrator) doMigrate() error {
+func (m *migrator) doMigrate() (retErr error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
+		cancel()
+
 		finishedIn := time.Since(m.startedAt).String()
+
+		if m.existingRows != m.migratedRows {
+			retErr = fmt.Errorf("not all rounds migrated successfully expected: %d actual: %d", m.existingRows, m.migratedRows)
+			return
+		}
+
 		m.logger.Infow(
 			"Finished processing beacons",
 			"beaconName", m.beaconName,
 			"finishedIn", finishedIn,
 		)
-
-		cancel()
 	}()
-
-	distChan := make(chan beacon, m.bufferSize)
-
-	errChan := make(chan error)
 
 	//nolint:exhaustive // We want to explicitly ignore the chain.MemDB backend since there's nothing to migrate there.
 	switch m.destination {
 	case chain.BoltDB:
-		go m.migrateBolt(ctx, distChan, errChan)
+		return m.migrateBolt(ctx)
 	case chain.PostgreSQL:
-		go m.migratePostgres(ctx, distChan, errChan)
+		return m.migratePostgres(ctx)
 	default:
 		return nil
 	}
+}
 
-	if err := m.reader(distChan); err != nil {
+func (m *migrator) migratePostgres(ctx context.Context) (retErr error) {
+	store, cancel, err := pgConn(ctx, m.logger, m.beaconName, m.pgDSN)
+	if err != nil {
 		return err
 	}
 
-	return <-errChan
-}
-
-//nolint:funlen // This function has the right length
-func (m *migrator) migratePostgres(ctx context.Context, distChan chan beacon, errChan chan error) {
-	store, cancel, err := pgConn(ctx, m.logger, m.beaconName, m.pgDSN)
-	if err != nil {
-		errChan <- err
-		return
-	}
-	rows := 0
-	defer func() {
-		cancel()
-		finishedIn := time.Since(m.startedAt).String()
-		m.logger.Infow("finished saving data in postgres", "rows", rows, "finishedIn", finishedIn)
-
-		if m.existingRows != rows {
-			errChan <- fmt.Errorf("not all rounds migrated successfully expected: %d actual: %d", m.existingRows, rows)
-			return
-		}
-		close(errChan)
-	}()
+	defer cancel()
 
 	m.logger.Infow("dropping the FK from the table")
 	err = store.DropFK(ctx)
 	if err != nil {
-		errChan <- err
-		return
+		return err
 	}
 	defer func() {
 		m.logger.Infow("adding FK back to the table")
 		err := store.AddFK(ctx)
 		if err != nil {
-			errChan <- err
+			retErr = err
 			return
 		}
 	}()
@@ -288,40 +272,49 @@ func (m *migrator) migratePostgres(ctx context.Context, distChan chan beacon, er
 
 	buffSize := 0
 	bs := make([]chain.Beacon, pgBuffSize)
-	for val := range distChan {
-		rows++
+
+	err = m.reader(func(val beacon) error {
+		m.migratedRows++
 		b := chain.Beacon(val)
 
 		bs[buffSize] = b
 		buffSize++
 
 		if buffSize == pgBuffSize {
-			m.logger.Debugw("writing buffer contents to DB", "rows", rows)
 			err := store.BatchPut(ctx, bs)
 			if err != nil {
 				m.logger.Errorw("while writing buffer contents to DB", "err", err)
-				errChan <- err
-				return
+				return err
 			}
 
 			buffSize = 0
 		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
+	// Check to see if there are any elements left unsaved in the buffer
 	if buffSize > 0 {
-		m.logger.Infow("writing buffer contents to DB", "rows", buffSize)
+		m.logger.Debugw("writing buffer contents to DB", "rows", buffSize)
 		err := store.BatchPut(ctx, bs[:buffSize])
 		if err != nil {
 			m.logger.Errorw("while writing buffer contents to DB", "err", err)
-			errChan <- err
-			return
+			return err
 		}
 	}
+
+	return nil
 }
 
-func (m *migrator) swapMigratedFile(newBeaconPath string, rows int) error {
-	if m.existingRows != rows {
-		return fmt.Errorf("not all rounds migrated successfully expected: %d actual: %d", m.existingRows, rows)
+func (m *migrator) swapMigratedFile(newBeaconPath string) error {
+	if m.existingRows != m.migratedRows {
+		return fmt.Errorf(
+			"abort swapping migrated files. Not all rounds migrated successfully expected: %d actual: %d",
+			m.existingRows,
+			m.migratedRows,
+		)
 	}
 
 	m.logger.Infow("migrating BoltDB file")
@@ -334,20 +327,14 @@ func (m *migrator) swapMigratedFile(newBeaconPath string, rows int) error {
 	return os.Rename(newBeaconPath, m.sourceBeaconPath)
 }
 
-func (m *migrator) migrateBolt(ctx context.Context, distChan chan beacon, errChan chan error) {
+func (m *migrator) migrateBolt(ctx context.Context) error {
 	newBeaconPath := m.sourceBeaconPath + "-migrated"
-	rows := 0
 
 	db, err := bbolt.Open(newBeaconPath, ownerOnly, nil)
 	if err != nil {
-		errChan <- err
-		return
+		return err
 	}
-	defer func() {
-		db.Close()
-		finishedIn := time.Since(m.startedAt).String()
-		m.logger.Infow("finished saving data in boltdb", "rows", rows, "finishedIn", finishedIn)
-	}()
+	defer db.Close()
 
 	db.MaxBatchSize = m.bufferSize
 
@@ -362,34 +349,29 @@ func (m *migrator) migrateBolt(ctx context.Context, distChan chan beacon, errCha
 
 		//nolint:gomnd // uint64 is 8 bytes
 		newKey := make([]byte, 8)
-		for val := range distChan {
+
+		return m.reader(func(val beacon) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
 			}
 
-			rows++
+			m.migratedRows++
 
 			binary.BigEndian.PutUint64(newKey, val.Round)
-			err := bucket.Put(newKey, val.Signature)
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
+			return bucket.Put(newKey, val.Signature)
+		})
 	})
 
 	if err != nil {
-		errChan <- err
-		return
+		return err
 	}
 
-	errChan <- m.swapMigratedFile(newBeaconPath, rows)
+	return m.swapMigratedFile(newBeaconPath)
 }
 
-func (m *migrator) reader(distChan chan beacon) error {
+func (m *migrator) reader(callback func(beacon) error) error {
 	defer func() {
 		finishedIn := time.Since(m.startedAt).String()
 		m.logger.Infow(
@@ -399,8 +381,6 @@ func (m *migrator) reader(distChan chan beacon) error {
 			"finishedIn", finishedIn,
 		)
 	}()
-
-	defer close(distChan)
 
 	existingDB, err := bbolt.Open(m.sourceBeaconPath, ownerOnly, nil)
 	if err != nil {
@@ -420,9 +400,7 @@ func (m *migrator) reader(distChan chan beacon) error {
 				return err
 			}
 
-			distChan <- b
-
-			return nil
+			return callback(b)
 		})
 	})
 }
