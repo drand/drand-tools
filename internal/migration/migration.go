@@ -47,7 +47,7 @@ const (
 
 var (
 	// ErrMigrationNotNeeded is returned if the database format is already at the target version
-	ErrMigrationNotNeeded = fmt.Errorf("migration not needed")
+	ErrMigrationNotNeeded = errors.New("migration not needed")
 
 	bucketName = []byte("beacons")
 )
@@ -56,12 +56,10 @@ func Migrate(logger log.Logger, sourceBeaconPath, beaconName string, destination
 	startedAt := time.Now()
 
 	if err := shouldMigrate(logger, sourceBeaconPath, beaconName, destination, pgDSN); err != nil {
-		logger.Warnw("decided storage format migration is not needed", "err", err)
 		if errors.Is(err, ErrMigrationNotNeeded) {
-			return err
+			logger.Warnw("decided storage format migration is not needed", "err", err)
 		}
-
-		return nil
+		return err
 	}
 
 	bufferSize, err := computerBufferSize(bufferSize, logger, sourceBeaconPath)

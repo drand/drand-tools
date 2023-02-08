@@ -19,7 +19,7 @@ After applying this update, the following changes will be applied to the databas
 This change is a breaking change. Once migrated, you won't be able to use the old drand version with the
 database format.
 
-Another change applied is setting the FillPercentage of the bucket.
+Another change applied is setting the FillPercentage of the BoltDB bucket.
 
 By default, this value is 50%. Thanks to drand's workload type, we can optimize this and
 change it to 100% as the workload is append-only.
