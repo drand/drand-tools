@@ -24,6 +24,12 @@ var (
 
 	//nolint:lll // This is a flag
 	bufferSize = flag.Int("buffer-size", migration.DefaultBufferSize, "Number of beacons that can be migrated at once. Use 0 to pre-allocate all the beacons.")
+
+	errBeaconNameEmpty        = errors.New("beacon name is empty")
+	errSourcePathEmpty        = errors.New("source path is empty")
+	errSourcePathMissing      = errors.New("source path does not exists")
+	errUnknownMigrationTarget = errors.New("unknown migration target")
+	errPostgresDSNEmpty       = errors.New("postgres dsn is empty")
 )
 
 func main() {
@@ -48,24 +54,24 @@ func run(logger log.Logger) error {
 
 func checkValues(sourcePath, beaconName, pgDSN string, migrationTarget chain.StorageType) error {
 	if sourcePath == "" {
-		return fmt.Errorf("source path must be specified but %s", "source path is empty")
+		return fmt.Errorf("source path must be specified but %w", errSourcePathEmpty)
 	}
 
 	if beaconName == "" {
-		return fmt.Errorf("beacon name must be specified but %s", "beacon name is empty")
+		return fmt.Errorf("beacon name must be specified but %w", errBeaconNameEmpty)
 	}
 
 	if e, _ := fs.Exists(sourcePath); !e {
-		return fmt.Errorf("source path must be specified but %s", "source path does not exists")
+		return fmt.Errorf("source path must be specified but %w", errSourcePathMissing)
 	}
 
 	if migrationTarget != chain.BoltDB &&
 		migrationTarget != chain.PostgreSQL {
-		return fmt.Errorf("unknown migration target %s", migrationTarget)
+		return fmt.Errorf("%w %s", errUnknownMigrationTarget, migrationTarget)
 	}
 
 	if pgDSN == "" {
-		return fmt.Errorf("postgres dsn is empty")
+		return errPostgresDSNEmpty
 	}
 
 	return nil

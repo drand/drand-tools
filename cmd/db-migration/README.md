@@ -29,28 +29,45 @@ This change is transparent to the user.
 
 ## Usage example
 
-To use this tool, you should first stop the node, then run a command similar to this:
+To use this tool, you should first stop the node. Then, run the command with the desired target type.
+
+### BoltDB to BoltDB
+
+To migrate from the pre-1.5 BoltDB storage format to the new one, run a command similar to this:
 ```shell
-db-migration -beacon default -target bolt -bufferSize 20000 -source $TMP/d1/multibeacon/default/db/drand.db
+db-migration -beacon default -target bolt -buffer-size 20000 -source $TMP/d1/multibeacon/default/db/drand.db
 ```
 
 This will:
-- use the `source` file as an input to migrate from that database format
-- swap the newly created file with the `source` file
-- produce a backup of the existing `drand.db` file
+- Use the `source` file as an input to migrate from that database format.
+- Swap the newly created file with the `source` file.
+- Produce an in-place backup of the existing `drand.db` file. The backup file will be `$TMP/d1/multibeacon/default/db/drand.db.old`.
 
 The backup is produced only when migrating from BoltDB to BoltDB.
 A backup will not be produced for a migration from BoltDB to PostgreSQL.
 
+### BoltDB to PostgreSQL
+
+To migrate from BoltDB to PostgreSQL, run a command similar to this:
+
+```shell
+db-migration -beacon default -target postgres -pg-dsn 'postgres://user:password@host:port/drand?sslmode=disable&connect_timeout=5' -buffer-size 20000 -source $TMP/d1/multibeacon/default/db/drand.db 
+```
+
+This will:
+- Create the required database tables.
+- Apply any migration differences between existing tables, created by a previous run of this tool, and new ones.
+- Start performing the migration from BoltDB to Postgres
+
 ### Buffering size
 
-To help with different system constraints, the tool exposes the `-bufferSize` flag.
+To help with different system constraints, the tool exposes the `-buffer-size` flag.
 
 This allows users to set the number of beacons stored in-memory during the migration. It will also
 act as a hint for how large the BoltDB transaction must be before flushing the records to the file.
 
 The logic for setting it is:
-- If the bufferSize < 0 then the application will default to 10000 entries.
-- If the bufferSize == 0 then the application will use the number of rounds stored in the source database as size. For large workloads, this might consume a lot of memory.
-- If the is 0 < bufferSize < 10000 then you'll see a warning about the process possibly taking a bit longer than usual.
-- If the bufferSize > 10000000 then you'll see a warning about this as the system memory could get pretty high.
+- If the buffer-size < 0 then the application will default to 10000 entries.
+- If the buffer-size == 0 then the application will use the number of rounds stored in the source database as size. For large workloads, this might consume a lot of memory.
+- If the is 0 < buffer-size < 10000 then you'll see a warning about the process possibly taking a bit longer than usual.
+- If the buffer-size > 10000000 then you'll see a warning about this as the system memory could get pretty high.

@@ -29,14 +29,17 @@ type (
 		startedAt time.Time
 		logger    log.Logger
 
-		pgDSN            string
+		pgDSN string
+		// Controls different buffers depending on the storageTargetType:
+		// - For BoltDB, this keeps all entries without committing them to the disk.
+		// - For Postgres, this is automatically capped 30_000 entries to due limitations in Postgres.
 		bufferSize       int
 		beaconName       string
 		sourceBeaconPath string
 
-		existingRows int
-		migratedRows int
-		destination  chain.StorageType
+		existingRows      int
+		migratedRows      int
+		storageTargetType chain.StorageType
 	}
 )
 
@@ -53,10 +56,13 @@ var (
 	bucketName = []byte("beacons")
 )
 
-func Migrate(logger log.Logger, sourceBeaconPath, beaconName string, destination chain.StorageType, pgDSN string, bufferSize int) error {
+// Migrate runs the migration based on the input parameters.
+//
+//nolint:lll // This is intended
+func Migrate(logger log.Logger, sourceBeaconPath, beaconName string, storageTargetType chain.StorageType, pgDSN string, bufferSize int) error {
 	startedAt := time.Now()
 
-	if err := shouldMigrate(logger, sourceBeaconPath, beaconName, destination, pgDSN); err != nil {
+	if err := shouldMigrate(logger, sourceBeaconPath, beaconName, storageTargetType, pgDSN); err != nil {
 		if errors.Is(err, ErrMigrationNotNeeded) {
 			logger.Warnw("decided storage format migration is not needed", "err", err)
 		}
@@ -72,11 +78,11 @@ func Migrate(logger log.Logger, sourceBeaconPath, beaconName string, destination
 		logger:    logger,
 		startedAt: startedAt,
 
-		pgDSN:            pgDSN,
-		bufferSize:       bufferSize,
-		beaconName:       beaconName,
-		sourceBeaconPath: sourceBeaconPath,
-		destination:      destination,
+		pgDSN:             pgDSN,
+		bufferSize:        bufferSize,
+		beaconName:        beaconName,
+		sourceBeaconPath:  sourceBeaconPath,
+		storageTargetType: storageTargetType,
 	}
 
 	return m.doMigrate()
@@ -135,7 +141,7 @@ func shouldMigrate(logger log.Logger, sourceBeaconPath, beaconName string, desti
 	case chain.PostgreSQL:
 		return shouldMigratePostgres(logger, beaconName, pgDSN)
 	default:
-		return fmt.Errorf("unknown destination type %q for migration package", destination)
+		return fmt.Errorf("unknown migration storage target type %q for migration package", destination)
 	}
 }
 
@@ -216,7 +222,8 @@ func (m *migrator) doMigrate() (retErr error) {
 		finishedIn := time.Since(m.startedAt).String()
 
 		if m.existingRows != m.migratedRows {
-			retErr = fmt.Errorf("not all rounds migrated successfully expected: %d actual: %d", m.existingRows, m.migratedRows)
+			errMessage := "not all rounds migrated successfully expected: %d actual: %d\nconsider running drand sync to restore the missing rounds"
+			retErr = fmt.Errorf(errMessage, m.existingRows, m.migratedRows)
 			return
 		}
 
@@ -228,7 +235,7 @@ func (m *migrator) doMigrate() (retErr error) {
 	}()
 
 	//nolint:exhaustive // We want to explicitly ignore the chain.MemDB backend since there's nothing to migrate there.
-	switch m.destination {
+	switch m.storageTargetType {
 	case chain.BoltDB:
 		return m.migrateBolt(ctx)
 	case chain.PostgreSQL:
