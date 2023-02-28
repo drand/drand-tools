@@ -398,13 +398,21 @@ func (m *migrator) reader(callback func(beacon) error) error {
 
 	return existingDB.View(func(tx *bbolt.Tx) error {
 		existingBucket := tx.Bucket(bucketName)
+		var previousSig []byte
 		return existingBucket.ForEach(func(k, v []byte) error {
 			m.existingRows++
 
 			b := beacon{}
 			err := json.Unmarshal(v, &b)
 			if err != nil {
-				return err
+				if m.storageTargetType == chain.PostgreSQL {
+					b.Round = chain.BytesToRound(k)
+					copy(b.Signature, v)
+					b.PreviousSig = previousSig
+					copy(previousSig, v)
+				} else {
+					return err
+				}
 			}
 
 			return callback(b)

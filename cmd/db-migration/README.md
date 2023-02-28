@@ -41,9 +41,10 @@ db-migration -beacon default -target bolt -buffer-size 20000 -source $TMP/d1/mul
 This will:
 - Use the `source` file as an input to migrate from that database format.
 - Swap the newly created file with the `source` file.
-- Produce an in-place backup of the existing `drand.db` file. The backup file will be `$TMP/d1/multibeacon/default/db/drand.db.old`.
+- Produce an in-place backup of the existing `drand.db` file.
 
-The backup is produced only when migrating from BoltDB to BoltDB.
+The backup is produced only when migrating from BoltDB to BoltDB. In the above example,
+the backup file will be under `$TMP/d1/multibeacon/default/db/drand.db.old`.
 A backup will not be produced for a migration from BoltDB to PostgreSQL.
 
 ### BoltDB to PostgreSQL
