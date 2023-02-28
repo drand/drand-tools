@@ -3,7 +3,7 @@ module github.com/drand/drand-tools
 go 1.19
 
 require (
-	github.com/drand/drand v1.5.3-testnet
+	github.com/drand/drand v1.5.3
 	github.com/nikkolasg/hexjson v0.1.0
 	go.etcd.io/bbolt v1.3.7
 )
