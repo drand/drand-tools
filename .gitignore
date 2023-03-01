@@ -1,0 +1,13 @@
+TODO.md
+dist/
+*.DS_Store
+*swagger.json
+gh-md-toc
+web/public/
+/drand
+cover*
+.idea
+**/nohup.out
+.tool-versions
+backups
+/db-migration
