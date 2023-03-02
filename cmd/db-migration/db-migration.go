@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	verbosePath     = flag.Bool("verbose", false, "Should the logs include DEBUG and INFO level logs or not.")
 	sourcePath      = flag.String("source", "", "The source database to be migrated to the new format.")
 	beaconName      = flag.String("beacon", "", "The name of the beacon to be migrated.")
 	migrationTarget = flag.String("target", "", "The type of database to migrate to. Supported values: boltdb, postgres.\n"+
@@ -34,13 +35,17 @@ var (
 
 func main() {
 	flag.Parse()
-	logger := log.NewLogger(nil, log.LogDebug)
+	logLevel := log.LogWarn
+	if *verbosePath {
+		logLevel = log.LogDebug
+	}
+	logger := log.NewLogger(nil, logLevel)
 
 	err := run(logger)
 	if err != nil && !errors.Is(err, migration.ErrMigrationNotNeeded) {
 		logger.Panicw("while migrating the database", "err", err)
 	}
-	logger.Infow("finished migration process")
+	logger.Debugw("finished migration process")
 }
 
 func run(logger log.Logger) error {

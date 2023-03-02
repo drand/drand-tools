@@ -324,7 +324,7 @@ func (m *migrator) swapMigratedFile(newBeaconPath string) error {
 		)
 	}
 
-	m.logger.Infow("migrating BoltDB file")
+	m.logger.Debugw("migrating BoltDB file")
 
 	err := os.Rename(m.sourceBeaconPath, fmt.Sprintf("%s.old", m.sourceBeaconPath))
 	if err != nil {
@@ -381,7 +381,7 @@ func (m *migrator) migrateBolt(ctx context.Context) error {
 func (m *migrator) reader(callback func(beacon) error) error {
 	defer func() {
 		finishedIn := time.Since(m.startedAt).String()
-		m.logger.Infow(
+		m.logger.Debugw(
 			"finished reading existing beacon database",
 			"beaconName", m.beaconName,
 			"rows", m.existingRows,
@@ -398,11 +398,11 @@ func (m *migrator) reader(callback func(beacon) error) error {
 
 	return existingDB.View(func(tx *bbolt.Tx) error {
 		existingBucket := tx.Bucket(bucketName)
-		hadMissing := false
+		totalMissingRounds := uint64(0)
 
 		defer func() {
-			if hadMissing {
-				m.logger.Warnw("It seems that there are gaps in the existing rounds.")
+			if totalMissingRounds > 0 {
+				m.logger.Warnw("It seems that there are gaps in the existing rounds.", "totalMissingRounds", totalMissingRounds)
 				m.logger.Warnw("To fix these, launch the drand daemon with this new migrated database, then run drand sync to add the missing ones.")
 				m.logger.Warnw("You do not need to run the database migration tool again after the sync operation.")
 			}
@@ -427,7 +427,7 @@ func (m *migrator) reader(callback func(beacon) error) error {
 			}
 
 			if previousRound+1 < b.Round {
-				hadMissing = true
+				totalMissingRounds += b.Round - previousRound
 				m.logger.Warnw("missing round(s) detected", "previousRound", previousRound, "currentRound", b.Round)
 			}
 			previousRound = b.Round
