@@ -110,7 +110,7 @@ err "[+] building drand db-migration tool ..."
 go build -o db-migration-test ./cmd/db-migration/
 
 err "[+] checking database before migration..."
-$tmp/drand-test-v148 sync --sync-nodes 127.0.0.1:$((p[0]+1)) --control "${p[0]}" --up-to 20
+$tmp/drand-test-v148 sync --sync-nodes 127.0.0.1:$((p[0]+1)) --control "${p[0]}" --up-to 20 --id default
 
 err "[+] Stopping instances ..."
 for pid in "${bgPIDs[@]}"; do
@@ -149,7 +149,7 @@ done
 sleep 1
 
 err "[+] checking database after migration..."
-$tmp/drand-master sync --sync-nodes 127.0.0.1:$((p[0]+1)) --control "${p[0]}" --up-to 20
+$tmp/drand-master sync --sync-nodes 127.0.0.1:$((p[0]+1)) --control "${p[0]}" --up-to 20 --id default
 
 sleep 1
 
