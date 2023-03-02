@@ -398,6 +398,17 @@ func (m *migrator) reader(callback func(beacon) error) error {
 
 	return existingDB.View(func(tx *bbolt.Tx) error {
 		existingBucket := tx.Bucket(bucketName)
+		hadMissing := false
+
+		defer func() {
+			if hadMissing {
+				m.logger.Warnw("It seems that there are gaps in the existing rounds.")
+				m.logger.Warnw("To fix these, launch the drand daemon with this new migrated database, then run drand sync to add the missing ones.")
+				m.logger.Warnw("You do not need to run the database migration tool again after the sync operation.")
+			}
+		}()
+
+		var previousRound uint64
 		var previousSig []byte
 		return existingBucket.ForEach(func(k, v []byte) error {
 			m.existingRows++
@@ -414,6 +425,12 @@ func (m *migrator) reader(callback func(beacon) error) error {
 					return err
 				}
 			}
+
+			if previousRound+1 < b.Round {
+				hadMissing = true
+				m.logger.Warnw("missing round(s) detected", "previousRound", previousRound, "currentRound", b.Round)
+			}
+			previousRound = b.Round
 
 			return callback(b)
 		})
