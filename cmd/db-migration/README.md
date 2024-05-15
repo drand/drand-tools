@@ -31,7 +31,17 @@ This change is transparent to the user.
 
 To use this tool, you should first stop the node. Then, run the command with the desired target type.
 
+
 ### BoltDB to BoltDB
+
+You'll need to:
+1. stop the drand node
+2. copy the database files from its multibeacon folder for the beacons you're running to somewhere else
+3. restart the node to make sure it's up during the update of the databases
+4. process all your database copies using this tool, creating the new ones
+5. stop the node again
+6. put the new format database instead of the old one
+7. restart the node and let it sync with the rest of the network (since the copy of the database will be missing the last few beacons)
 
 To migrate from the pre-1.5 BoltDB storage format to the new one, run a command similar to this:
 ```shell
