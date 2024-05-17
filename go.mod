@@ -1,8 +1,6 @@
 module github.com/drand/drand-tools
 
-go 1.21
-
-toolchain go1.22.2
+go 1.22
 
 require (
 	github.com/drand/drand v1.5.11
