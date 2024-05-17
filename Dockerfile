@@ -1,4 +1,4 @@
-FROM golang:1.19.5-buster AS builder
+FROM golang:1.22-bookworm AS builder
 
 ARG major=0
 ARG minor=0
