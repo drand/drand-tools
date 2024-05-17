@@ -16,18 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.3.0
+        uses: actions/checkout@v4
       - name: Install Go
-        uses: actions/setup-go@v3.5.0
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.19.5'
-      - uses: actions/cache@v3.2.3
-        id: cache
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          go-version: '1.22'
       - name: Build
         env:
           DRAND_TEST_LOGS: "${{ runner.debug == '1' && 'DEBUG' || 'INFO' }}"
@@ -41,17 +34,10 @@ jobs:
       CI: "true"
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.3.0
-      - uses: actions/setup-go@v3.5.0
+        uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.19.5'
-      - uses: actions/cache@v3.2.3
-        id: cache
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          go-version: '1.22'
       - run: go get -v -t -d ./...
       - name: Unit tests
         env:
@@ -68,17 +54,10 @@ jobs:
       CI: "true"
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.3.0
-      - uses: actions/setup-go@v3.5.0
+        uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.19.5'
-      - uses: actions/cache@v3.2.3
-        id: cache
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          go-version: '1.22'
       - run: make coverage
         env:
           DRAND_TEST_LOGS: "${{ runner.debug == '1' && 'DEBUG' || 'INFO' }}"
